@@ -2,6 +2,8 @@ import os
 from anthropic import Anthropic
 from dotenv import load_dotenv
 import json
+import requests
+from geopy.geocoders import Nominatim
 
 
 chat = True
@@ -23,6 +25,23 @@ def edit_files(filename, content, mode):
         with open(os.path.join(obsidian_vault,filename), mode) as edit_file:
             edit_file.write(content)
         return f"Successfully wrote to {filename} in {mode} mode. Content written: {content}"
+    
+def get_weather(location, unit):
+    try:
+        geolocator = Nominatim(user_agent = "Assistant")
+        location_coords = geolocator.geocode(location)
+        weather_params = {
+            "latitude": location_coords.latitude,
+            "longitude": location_coords.longitude,
+            "current": "temperature_2m",
+            "temperature_unit": unit,
+        }
+        response = requests.get("https://api.open-meteo.com/v1/forecast", params = weather_params)
+        data = response.json()
+        return f"The weather in {location} is {data['current']['temperature_2m']}"
+    except Exception as e:
+        return f"Weather could not be returned: {e}"
+    
     
 tools = [
     {
@@ -62,7 +81,32 @@ tools = [
             },
          "required": ["filename", "content", "mode"],
         }
-    }
+    },
+    
+    {
+        "name": "get_weather",
+        "description": "Get the current weather in a given location",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "location": {
+                    "type": "string",
+                    "description": "The city and state, e.g. San Francisco, CA",
+                },
+                "unit": {
+                    "type": "string",
+                    "enum": ["celsius", "fahrenheit"],
+                    "description": "The unit of temperature",
+                },
+            },
+            "required": ["location"],
+        },
+        "input_examples": [
+            {"location": "San Francisco, CA", "unit": "fahrenheit"},
+            {"location": "Tokyo, Japan", "unit": "celsius"},
+            {"location": "New York, NY"},
+        ],
+    },
 ]
 
 with open(os.path.join(obsidian_vault,"startup.md"), "r") as startup:
@@ -122,6 +166,8 @@ while chat:
                 result = access_files(j.input["filename"])
             elif j.name == "edit_files":
                 result = edit_files(j.input["filename"],j.input["content"], j.input["mode"] )
+            elif j.name == "get_weather":
+                result = get_weather(j.input["location"], j.input["unit"])
             else:
                 result = "agent not found"
             tool_result.append(
