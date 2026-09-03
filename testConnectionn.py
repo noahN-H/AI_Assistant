@@ -18,6 +18,12 @@ def access_files(filename):
         read_file = open_file.read()
         return read_file
     
+def edit_files(filename, content, mode):
+    if filename != "startup.md":
+        with open(os.path.join(obsidian_vault,filename), mode) as edit_file:
+            edit_file.write(content)
+        return f"Successfully wrote to {filename} in {mode} mode. Content written: {content}"
+    
 tools = [
     {
         "name": "access_files",
@@ -27,10 +33,34 @@ tools = [
             "properties": {
                 "filename": {
                     "type": "string",
-                    "description": "The exact filename to read, as it appears in the file index (e.g. 'eeg_project.md')."
+                    "description": "The exact filename to read, as it appears in the file index (e.g. 'eeg_project.md').",
                 }
             },
             "required": ["filename"]
+        }
+    },
+    
+    {
+        "name": "edit_files",
+        "description": "Creates and/or edits the contents of a specific file from the user's memory vault, given its filename. Use this when a file mentioned in the file index or not in the index but seems relevant to the current conversation.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "filename": {
+                    "type": "string",
+                    "description": "The exact filename that will either created or the exact filename of the file as it appears in the the file index (e.g. 'eeg_project.md').",
+                },
+                "content": {
+                    "type": "string",
+                    "description": "the content of which either will be appended to the file or overwrite in the file",
+                },
+                "mode": {
+                    "type": "string",
+                    "description": "the mode either 'a' for append where a file is created, or 'w' where a file is written to.",
+                    "enum": ["a", "w"],
+                },
+            },
+         "required": ["filename", "content", "mode"],
         }
     }
 ]
@@ -63,8 +93,8 @@ while chat:
                             path = os.path.join(obsidian_vault,filename)
                             with open(path, "a") as file:
                                 file.write(content)
-                except:
-                    print("could not load conversation into memory")
+                except Exception as e:
+                    print(f"Could not load conversation into memory because: {e}")
                     
         break
     
@@ -88,7 +118,12 @@ while chat:
             if i.type == "tool_use":
                 tool_use.append(i)
         for j in tool_use:
-            result = access_files(j.input["filename"])
+            if j.name == "access_files":
+                result = access_files(j.input["filename"])
+            elif j.name == "edit_files":
+                result = edit_files(j.input["filename"],j.input["content"], j.input["mode"] )
+            else:
+                result = "agent not found"
             tool_result.append(
                 {"type": "tool_result",
                 "tool_use_id": j.id,
